@@ -53,6 +53,8 @@ custom_colors = {
 # App setup
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
+server = app.server
+
 app.layout = dbc.Container([
     html.H2("ICP Plot Explorer"),
     dbc.Row([
