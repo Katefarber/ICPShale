@@ -1,4 +1,4 @@
-# Dash App with Color-Coded O2/CO2 Legend
+# Dash App with Reset Data Button
 import pandas as pd
 import plotly.express as px
 import dash
@@ -50,9 +50,7 @@ custom_colors = {
     "63C": "#4682B4", "67C": "#4682B4", "60C": "#4682B4", "64C": "#4682B4"
 }
 
-# App setup
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
 server = app.server
 
 app.layout = dbc.Container([
@@ -74,6 +72,7 @@ app.layout = dbc.Container([
             dcc.Slider(8, 22, 1, value=14, id="font_size"),
             html.Label("Point Size"),
             dcc.Slider(3, 20, 1, value=10, id="point_size"),
+            html.Button("Reset Data", id="reset_btn", n_clicks=0),
             html.Button("Download CSV", id="download_btn"),
             dcc.Download(id="download")
         ], width=3),
@@ -91,17 +90,17 @@ app.layout = dbc.Container([
                     html.Span("O₂ only"),
                     html.Br(),
                     html.Li("", style={"listStyleType": "none", "display": "inline-block", "width": "15px", "height": "15px", "backgroundColor": "#00008B", "marginRight": "8px"}),
-                    html.Span("CO₂"),
+                    html.Span("no O₂ + CO₂"),
                     html.Br(),
                     html.Li("", style={"listStyleType": "none", "display": "inline-block", "width": "15px", "height": "15px", "backgroundColor": "#4682B4", "marginRight": "8px"}),
-                    html.Span("none")
+                    html.Span("no O₂")
                 ])
             ], style={"fontSize": "14px", "marginTop": "10px"})
         ])
     ])
 ])
 
-# Initialize memory
+original_data = df_all.copy()
 cleaned_data = df_all.copy()
 
 @app.callback(
@@ -122,16 +121,21 @@ def update_elements(shale_id, current_element):
     Input("font_size", "value"),
     Input("point_size", "value"),
     Input("plot", "clickData"),
+    Input("reset_btn", "n_clicks"),
     State("plot", "figure")
 )
-def update_plot(shale_id, element, sample_type, font_size, point_size, clickData, current_fig):
+def update_plot(shale_id, element, sample_type, font_size, point_size, clickData, reset_clicks, current_fig):
     global cleaned_data
+    trigger = ctx.triggered_id
+
+    if trigger == "reset_btn":
+        cleaned_data = original_data.copy()
 
     dff = cleaned_data[(cleaned_data["Shale_ID"] == shale_id) & (cleaned_data["Element"] == element)]
     if sample_type:
         dff = dff[dff["Sample_Type"].isin(sample_type)]
 
-    if clickData and ctx.triggered_id == "plot":
+    if clickData and trigger == "plot":
         pt = clickData["points"][0]
         clicked_time = pt["x"]
         clicked_y = pt["y"]
@@ -176,4 +180,3 @@ def download_csv(n):
 
 if __name__ == "__main__":
     app.run(debug=True)
-#run python icp_dash_app.py
