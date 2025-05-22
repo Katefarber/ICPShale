@@ -7,9 +7,9 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 
 # Load datasets
-exp1_path = "C:/Users/KathrynFarber/OneDrive - USF - eStore/Documents/SFA-shale/data/icpTotRaw.csv"
-exp2_path = "C:/Users/KathrynFarber/OneDrive - USF - eStore/Documents/SFA-shale/data/Exp2_TotICP.csv"
-bis_path = "C:/Users/KathrynFarber/OneDrive - USF - eStore/Documents/SFA-shale/data/exBis12TotIcp.csv"
+exp1_path = "icpTotRaw.csv"
+exp2_path = "Exp2_TotICP.csv"
+bis_path = "exBis12TotIcp.csv"
 
 def load_experiment(path, label):
     df = pd.read_csv(path)
