@@ -9,99 +9,152 @@ import plotly.graph_objects as go
 original_data = pd.read_csv("data/cleaned_icp_data.csv")
 cleaned_data = original_data.copy()
 
-# Assign treatment condition
-def assign_condition(group):
-    if group == "A":
-        return "O2 + CO2"
-    elif group == "B":
-        return "CO2"
-    elif group == "D":
-        return "O2"
-    elif group == "C":
-        return "None"
-    else:
-        return "Unknown"
+# Add O2 and CO2 presence columns based on Group
+oxygen_groups = ["A", "D"]  # O2 present
+co2_groups = ["A", "B"]      # CO2 present
+original_data["O2"] = original_data["Group"].isin(oxygen_groups)
+original_data["CO2"] = original_data["Group"].isin(co2_groups)
+cleaned_data = original_data.copy()
 
-cleaned_data["Condition"] = cleaned_data["Group"].apply(assign_condition)
-original_data["Condition"] = original_data["Group"].apply(assign_condition)
-
-# Define colors for each condition
-condition_colors = {
-    "O2 + CO2": "#8B0000",  # Dark Red
-    "CO2": "#00008B",       # Dark Blue
-    "O2": "#FF6347",        # Light Red
-    "None": "#4682B4",      # Light Blue
-    "Unknown": "gray"
-}
-
-# Set up Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-app.layout = html.Div([
+app.layout = dbc.Container([
+    html.H2("ICP Plot Explorer"),
     dbc.Row([
         dbc.Col([
             html.Label("Shale ID"),
-            dcc.Dropdown(id="shale_id", options=[{"label": sid, "value": sid} for sid in sorted(original_data["Shale_ID"].dropna().unique(), key=str)], value=None),
+            dcc.Dropdown(id="shale_id", options=[{"label": sid, "value": sid} for sid in sorted(original_data["Shale_ID"].dropna().unique())], value="64"),
 
             html.Label("Element"),
-            dcc.Dropdown(id="element", options=[{"label": el, "value": el} for el in sorted(original_data["Element"].dropna().unique())], value=None),
+            dcc.Dropdown(id="element"),
 
             html.Label("Sample Type"),
-            dcc.Checklist(id="sample_type", options=[{"label": t, "value": t} for t in original_data["Sample_Type"].dropna().unique()], value=["Disk", "Dust"], inline=True),
+            dcc.Checklist(
+                id="sample_type",
+                options=[{"label": t, "value": t} for t in ["Disk", "Dust"]],
+                value=["Disk", "Dust"],
+                inline=True
+            ),
+
+            html.Label("Font Size"),
+            dcc.Slider(8, 22, 1, value=14, id="font_size"),
+
+            html.Label("Point Size"),
+            dcc.Slider(3, 20, 1, value=10, id="point_size"),
 
             html.Button("Reset Data", id="reset_btn", n_clicks=0),
+            html.Button("Download CSV", id="download_btn"),
+            dcc.Download(id="download")
         ], width=3),
 
         dbc.Col([
-            dcc.Graph(id="plot")
-        ], width=9)
-    ]),
-
-    html.Div([
-        html.Div("Legend:", style={"fontWeight": "bold", "marginTop": "20px"}),
-        html.Div([
-            html.Span("O2 + CO2", style={"backgroundColor": "#8B0000", "color": "white", "padding": "5px", "marginRight": "10px"}),
-            html.Span("CO2", style={"backgroundColor": "#00008B", "color": "white", "padding": "5px", "marginRight": "10px"}),
-            html.Span("O2", style={"backgroundColor": "#FF6347", "padding": "5px", "marginRight": "10px"}),
-            html.Span("None", style={"backgroundColor": "#4682B4", "padding": "5px"})
+            dcc.Graph(id="plot", config={"displaylogo": False}),
+            html.Div(id="click_log"),
+            html.Br(),
+            html.Div([
+                html.H6("O₂ / CO₂ Condition Legend:"),
+                html.Ul([
+                    html.Li("", style={"listStyleType": "none", "display": "inline-block", "width": "15px", "height": "15px", "backgroundColor": "#FF0000", "marginRight": "8px"}),
+                    html.Span("O₂ present"),
+                    html.Br(),
+                    html.Li("", style={"listStyleType": "none", "display": "inline-block", "width": "15px", "height": "15px", "backgroundColor": "#0000FF", "marginRight": "8px"}),
+                    html.Span("O₂ absent"),
+                    html.Br(),
+                    html.Span("Line Style: ", style={"marginRight": "8px", "fontWeight": "bold"}),
+                    html.Span("Solid = CO₂ present, Dashed = CO₂ absent")
+                ])
+            ], style={"fontSize": "14px", "marginTop": "10px"})
         ])
     ])
 ])
+
+@app.callback(
+    Output("element", "options"),
+    Input("shale_id", "value"),
+    State("element", "value")
+)
+def update_elements(shale_id, current_element):
+    filtered = original_data[original_data["Shale_ID"] == shale_id]
+    elements = sorted(filtered["Element"].dropna().unique())
+    return [{"label": e, "value": e} for e in elements]
 
 @app.callback(
     Output("plot", "figure"),
     Input("shale_id", "value"),
     Input("element", "value"),
     Input("sample_type", "value"),
-    Input("reset_btn", "n_clicks")
+    Input("font_size", "value"),
+    Input("point_size", "value"),
+    Input("plot", "clickData"),
+    Input("reset_btn", "n_clicks"),
+    State("plot", "figure")
 )
-def update_plot(shale_id, element, sample_type, n_clicks):
+def update_plot(shale_id, element, sample_type, font_size, point_size, clickData, reset_clicks, current_fig):
     global cleaned_data
-    if ctx.triggered_id == "reset_btn":
+    trigger = ctx.triggered_id
+
+    if trigger == "reset_btn":
         cleaned_data = original_data.copy()
 
-    df = cleaned_data.copy()
-
-    if shale_id:
-        df = df[df["Shale_ID"] == shale_id]
-    if element:
-        df = df[df["Element"] == element]
+    dff = cleaned_data[(cleaned_data["Shale_ID"] == shale_id) & (cleaned_data["Element"] == element)]
     if sample_type:
-        df = df[df["Sample_Type"].isin(sample_type)]
+        dff = dff[dff["Sample_Type"].isin(sample_type)]
 
-    fig = px.scatter(
-        df,
-        x="Time", y="Concentration",
-        color="Condition",
-        color_discrete_map=condition_colors,
-        symbol="Sample_Type",
-        hover_data=["Sample_ID"],
-        labels={"Concentration": "[ppb]"},
-        title=f"Shale {shale_id}: [{element}]" if shale_id and element else "ICP Concentrations"
+    if clickData and trigger == "plot":
+        pt = clickData["points"][0]
+        clicked_time = pt["x"]
+        clicked_y = pt["y"]
+        clicked_id = pt["text"] if "text" in pt else None
+        if clicked_id:
+            cleaned_data = cleaned_data[~(
+                (cleaned_data["Sample_ID"] == clicked_id) &
+                (cleaned_data["Time"] == clicked_time) &
+                (cleaned_data["Element"] == element)
+            )]
+            dff = dff[~(
+                (dff["Sample_ID"] == clicked_id) &
+                (dff["Time"] == clicked_time)
+            )]
+
+    if dff.empty:
+        return px.scatter(title="No data available for this selection.")
+
+    dff["Color"] = dff["O2"].apply(lambda x: "#FF0000" if x else "#0000FF")
+    dff["Dash"] = dff["CO2"].apply(lambda x: "solid" if x else "dash")
+
+    fig = go.Figure()
+    for combo in dff["Sample_Combo"].unique():
+        subset = dff[dff["Sample_Combo"] == combo]
+        fig.add_trace(go.Scatter(
+            x=subset["Time"], y=subset["Concentration"],
+            mode="lines+markers",
+            marker=dict(size=point_size, color=subset["Color"].iloc[0]),
+            line=dict(dash=subset["Dash"].iloc[0], color=subset["Color"].iloc[0]),
+            name=combo,
+            text=subset["Sample_ID"]
+        ))
+
+    fig.update_layout(
+        title=f"Shale {shale_id}: [{element}]",
+        title_font_size=font_size + 4,
+        font=dict(size=font_size),
+        xaxis_title="Time (days)",
+        yaxis_title=f"{element} Concentration",
+        xaxis=dict(showgrid=False, rangemode="tozero"),
+        yaxis=dict(showgrid=False, rangemode="tozero"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)"
     )
-
     return fig
 
+@app.callback(
+    Output("download", "data"),
+    Input("download_btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def download_csv(n):
+    return dcc.send_data_frame(cleaned_data.to_csv, "data/cleaned_icp_data.csv")
+
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    app.run(debug=True)
