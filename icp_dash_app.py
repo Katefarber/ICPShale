@@ -9,6 +9,31 @@ import plotly.graph_objects as go
 original_data = pd.read_csv("data/cleaned_icp_data.csv")
 cleaned_data = original_data.copy()
 
+# Assign treatment condition
+def assign_condition(group):
+    if group == "A":
+        return "O2 + CO2"
+    elif group == "B":
+        return "CO2"
+    elif group == "D":
+        return "O2"
+    elif group == "C":
+        return "None"
+    else:
+        return "Unknown"
+
+cleaned_data["Condition"] = cleaned_data["Group"].apply(assign_condition)
+original_data["Condition"] = original_data["Group"].apply(assign_condition)
+
+# Define colors for each condition
+condition_colors = {
+    "O2 + CO2": "#8B0000",  # Dark Red
+    "CO2": "#00008B",       # Dark Blue
+    "O2": "#FF6347",        # Light Red
+    "None": "#4682B4",      # Light Blue
+    "Unknown": "gray"
+}
+
 # Set up Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
@@ -37,9 +62,9 @@ app.layout = html.Div([
         html.Div("Legend:", style={"fontWeight": "bold", "marginTop": "20px"}),
         html.Div([
             html.Span("O2 + CO2", style={"backgroundColor": "#8B0000", "color": "white", "padding": "5px", "marginRight": "10px"}),
-            html.Span("O2 only", style={"backgroundColor": "#FF6347", "padding": "5px", "marginRight": "10px"}),
-            html.Span("no O2 + CO2", style={"backgroundColor": "#00008B", "color": "white", "padding": "5px", "marginRight": "10px"}),
-            html.Span("no O2", style={"backgroundColor": "#4682B4", "padding": "5px"})
+            html.Span("CO2", style={"backgroundColor": "#00008B", "color": "white", "padding": "5px", "marginRight": "10px"}),
+            html.Span("O2", style={"backgroundColor": "#FF6347", "padding": "5px", "marginRight": "10px"}),
+            html.Span("None", style={"backgroundColor": "#4682B4", "padding": "5px"})
         ])
     ])
 ])
@@ -53,9 +78,7 @@ app.layout = html.Div([
 )
 def update_plot(shale_id, element, sample_type, n_clicks):
     global cleaned_data
-    trigger = ctx.triggered_id
-
-    if trigger == "reset_btn":
+    if ctx.triggered_id == "reset_btn":
         cleaned_data = original_data.copy()
 
     df = cleaned_data.copy()
@@ -70,7 +93,8 @@ def update_plot(shale_id, element, sample_type, n_clicks):
     fig = px.scatter(
         df,
         x="Time", y="Concentration",
-        color="Sample_Combo",
+        color="Condition",
+        color_discrete_map=condition_colors,
         symbol="Sample_Type",
         hover_data=["Sample_ID"],
         labels={"Concentration": "[ppb]"},
